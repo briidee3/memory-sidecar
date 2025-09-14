@@ -1,0 +1,64 @@
+# Configuration file for Redpanda Connect
+# Intended to handle post creation, updating, and deletion in conjunction with OpenSearch
+
+input:
+  label: "upstream"
+  # https://docs.redpanda.com/redpanda-connect/components/inputs/redpanda/
+  redpanda:
+    seed_brokers: [ ${REDPANDA_BROKERS:localhost:9092} ]
+    topics: [ public.activity.os.upstream ] #${REDPANDA_PUBLIC_TOPIC_NAME:public.activity.os.upstream} ]
+    regexp_topics: false
+    transaction_isolation_level: read_uncommitted
+    consumer_group: ""
+    auto_replay_nacks: true
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        password: secretpassword #"${REDPANDA_ADMIN_PASS:secretpassword}"
+        username: superuser #"${REDPANDA_ADMIN_USER:superuser}"
+
+#buffer:
+#  sqlite:
+#    path: ./buffer.db
+
+pipeline:
+  threads: 1
+  processors:
+    - mapping: |
+        root = this
+
+        meta action = this.action
+
+        root.id = snowflake_id()
+        root.doc = this.body
+
+output:
+  #handle_post_cud:
+  #  kafka_franz:
+  #    topic: "public-topic"
+  #    metadata:
+  #      exclude_prefixes:
+  #        - topic
+  opensearch:
+    urls: [ http://localhost:9200 ] #"${OPENSEARCH_HTTP_API_BASE_URL:localhost:9200}" ]
+    index: public.activity # "${OPENSEARCH_PUBLIC_INDEX_NAME:public.activity}"
+    action: ${! @action }
+    id: ${! @id }
+    #max_in_flight: 64
+    batching:
+      byte_size: 536870912   # Max of 512 MB per batch by default
+      period: 5s
+    basic_auth:
+      enabled: false
+      username: ""
+      password: ""
+    #tls:
+
+#redpanda:
+#  seed_brokers: [ "redpanda-0:9092" ]
+  #tls:
+  #  enabled: true
+#  sasl:
+#    - mechanism: SCRAM-SHA-256
+#      password: "secretpassword" #"${REDPANDA_ADMIN_PASS:secretpassword}"
+#      username: "superuser" #"${REDPANDA_ADMIN_USER:superuser}"
+
